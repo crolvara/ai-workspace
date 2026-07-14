@@ -45,20 +45,21 @@ All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library
 ## Infrastructure
 
 - DB is **Neon Postgres** (cloud, decided 2026-07-14; replaced the local Docker Postgres). Two connection strings in `.env`: `DATABASE_URL` (pooled `-pooler` endpoint, runtime via `@prisma/adapter-pg`) and `DIRECT_DATABASE_URL` (direct endpoint, used by the Prisma CLI for migrations — `prisma.config.ts` prefers it).
-- Redis 7 is still **local Docker** on `:6380` via `docker-compose.yml` (`docker compose up -d redis`); without it the rate limiter falls back to in-memory. The old Postgres service remains in the compose file only as a data archive.
+- Redis: **local Docker** on `:6380` via `docker-compose.yml` (`docker compose up -d redis`) for dev; production uses **Upstash** (see Deployment). Without any Redis the rate limiter falls back to in-memory. The old Postgres service remains in the compose file only as a data archive.
 - `npm run build` needs the DB reachable: `/usage` is prerendered from Prisma aggregates and the build exits 1 if the connection fails.
 
-## Deployment — Vercel (planned 2026-07-15)
+## Deployment — Vercel (live since 2026-07-14)
 
-- Target is **Vercel** (Hobby/free tier) with the Neon DB above. Env vars to set in the Vercel project: `DATABASE_URL` (pooled), `DIRECT_DATABASE_URL`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `REDIS_URL`, and the three rate-limit vars.
-- **Redis must be Upstash** (free tier, official Vercel integration) — the local Docker Redis is unreachable from Vercel, and the in-memory fallback is useless on serverless (each instance counts separately), which silently disables abuse protection. Do not deploy publicly without a real `REDIS_URL`.
+- Deployed on **Vercel** (Hobby/free tier) from GitHub `crolvara/ai-workspace` (branch `master`, auto-deploy on push) with the Neon DB above. Env vars in the Vercel project: `DATABASE_URL` (pooled), `DIRECT_DATABASE_URL`, `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GEMINI_API_KEY`, `REDIS_URL`, and the three rate-limit vars — all environments, since `DATABASE_URL` is needed at **build time** too (the `/usage` prerender; first deploys failed on this).
+- Changing env vars does NOT redeploy by itself — trigger a Redeploy after editing them.
+- Production `REDIS_URL` is **Upstash** (free tier) — the local Docker Redis is unreachable from Vercel, and the in-memory fallback is useless on serverless (each instance counts separately), which silently disables abuse protection. Never point production at anything but a real shared Redis.
 - `x-forwarded-for` is trustworthy on Vercel (the proxy overwrites it), so per-IP limits work as designed.
-- **Rotate all three provider API keys before the first public deploy** — the current ones were pasted in plain text in a chat session (2026-07-14).
+- The three provider API keys were rotated for the deploy (2026-07-14) after the originals leaked into a chat session in plain text — the values in Vercel are the current ones.
 - **Vercel Blob: decided against** (2026-07-14) — generated images stay unpersisted data URLs (see Data access rules); Blob is storage, not generation, and adds nothing while the app has no image provider.
 
 ## Prisma 7 specifics
 
-- Generator is `prisma-client` with `output = "../src/generated/prisma"`; import from `@/generated/prisma/client`. `/src/generated/` is gitignored — run `npx prisma generate` after pulling schema changes (and restart the dev server: it caches the old client).
+- Generator is `prisma-client` with `output = "../src/generated/prisma"`; import from `@/generated/prisma/client`. `/src/generated/` is gitignored — run `npx prisma generate` after pulling schema changes (and restart the dev server: it caches the old client). Because it's gitignored, the build script is `prisma generate && next build` — required on Vercel (the first deploy failed with "Can't resolve '@/generated/prisma/client'" without it); don't simplify it back to plain `next build`.
 - `datasource` block has **no `url`** — the connection URL lives in `prisma.config.ts` (`datasource.url`), loaded via `dotenv`. Runtime uses `@prisma/adapter-pg` (see `src/lib/db.ts`).
 
 ## Abuse protection (public app on shared free quotas)
