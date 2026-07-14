@@ -127,4 +127,19 @@
   html {
     @apply font-sans;
   }
+  /* Tailwind 4 preflight resets buttons to cursor: default; restore the
+     pointer on every enabled interactive element (incl. Base UI's
+     div-based triggers/options/menu items, which carry ARIA roles). */
+  :where(
+      button,
+      [role="button"],
+      [role="combobox"],
+      [role="option"],
+      [role="menuitem"],
+      [role="menuitemcheckbox"],
+      [role="menuitemradio"],
+      [role="tab"]
+    ):not(:disabled, [data-disabled], [aria-disabled="true"]) {
+    cursor: pointer;
+  }
 }

@@ -18,7 +18,10 @@ All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library
 - In the `@theme inline` block `--font-sans` must map to `--font-geist-sans` (and `--font-heading` likewise) — a self-reference (`--font-sans: var(--font-sans)`) silently drops the whole app to the browser's serif fallback.
 - Top nav is `src/components/nav-links.tsx` (client component, `usePathname` active pill). New pages must be added to its `NAV_LINKS`.
 - Icons come from `lucide-react` — no ASCII/emoji glyphs (✕, ■, ☰) in the UI.
-- shadcn/Radix `<SelectValue>` must get explicit children (label looked up by value, see `chat-app.tsx`) — otherwise the closed trigger shows the raw key (`groq/llama-3.3-70b`) because portal-mounted items haven't registered their labels yet.
+- The shadcn primitives are **Base UI** (`@base-ui/react`), not Radix — triggers/options/menu items render as `<div>`s with ARIA roles, not native buttons.
+- `<SelectValue>` must get explicit children (label looked up by value, see `chat-app.tsx`) — otherwise the closed trigger shows the raw key (`groq/llama-3.3-70b`) because portal-mounted items haven't registered their labels yet.
+- `SelectContent` defaults to Base UI's `alignItemWithTrigger` (selected item overlays the trigger), which spills past the viewport edge when the trigger sits near it — for selects close to the bottom (e.g. the chat model picker) pass `side="top" alignItemWithTrigger={false}`.
+- Tailwind 4 preflight sets `cursor: default` on buttons; `globals.css` `@layer base` has a zero-specificity `:where(...)` rule restoring `cursor: pointer` on all enabled interactive elements (button + ARIA roles button/combobox/option/menuitem*/tab). Don't sprinkle `cursor-pointer` per component — new interactive elements are covered as long as they're a `<button>` or carry one of those roles.
 - Microcopy: sentence case, concise, no exclamation marks; users are addressed directly ("Describe the image you want…").
 - Turbopack can keep serving a stale compiled CSS chunk after a `globals.css` edit (seen with `@theme` variable changes) — if a token change doesn't show up, restart the dev server before debugging further.
 
