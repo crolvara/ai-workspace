@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// Anonymous browser session (httpOnly cookie), no auth.
+model Session {
+  id            String         @id @default(cuid())
+  createdAt     DateTime       @default(now())
+  lastSeenAt    DateTime       @default(now())
+  conversations Conversation[]
+  usageLogs     UsageLog[]
+  prompts       Prompt[]
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  sessionId String
+  session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title     String    @default("Нов разговор")
+  model     String
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  messages  Message[]
+
+  @@index([sessionId, updatedAt(sort: Desc)])
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           String // "user" | "assistant"
+  content        String
+  model          String? // assistant messages record which model produced them
+  inputTokens    Int?
+  outputTokens   Int?
+  latencyMs      Int?
+  createdAt      DateTime     @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// One row per completed model call — powers the usage dashboard.
+model UsageLog {
+  id           String   @id @default(cuid())
+  sessionId    String?
+  session      Session? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  provider     String // "groq" | "openrouter" | "gemini"
+  model        String
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  latencyMs    Int?
+  ok           Boolean  @default(true)
+  error        String?
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([provider, model])
+}
+
+// User-created prompt templates. Built-in templates are code, not DB rows
+// (see src/lib/prompts.ts).
+model Prompt {
+  id        String   @id @default(cuid())
+  sessionId String
+  session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  title     String
+  content   String
+  category  String   @default("Общи")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([sessionId, updatedAt(sort: Desc)])
+}

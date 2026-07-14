@@ -1,36 +1,59 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# AI Workspace
 
-## Getting Started
+A public platform (no sign-up, no billing) that brings free AI models together in one place: streaming chat, conversation history, model comparison and usage statistics.
 
-First, run the development server:
+## Stack
+
+- **Next.js 16** (App Router, RSC, Route Handlers) + **React 19** + **Tailwind 4** + **shadcn/ui**
+- **PostgreSQL** (Neon) + **Prisma 7** (`@prisma/adapter-pg`)
+- **Redis 7** — rate limiting (with an in-memory fallback for dev without Redis)
+- Providers (free only): **Groq**, **OpenRouter** (`:free` models), **Google Gemini**
+
+## Getting started
 
 ```bash
+# 1. Database — set DATABASE_URL / DIRECT_DATABASE_URL in .env (Neon Postgres,
+#    see .env.example). Redis for rate limiting (optional in dev):
+docker compose up -d redis
+
+# 2. Dependencies and migrations
+npm install
+npx prisma migrate dev
+
+# 3. API keys — fill in .env (all three are free):
+#    GROQ_API_KEY       → https://console.groq.com/keys
+#    OPENROUTER_API_KEY → https://openrouter.ai/settings/keys
+#    GEMINI_API_KEY     → https://aistudio.google.com/apikey
+
+# 4. Dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Structure
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+| Path | Description |
+|---|---|
+| `src/lib/models.ts` | Model registry — new models are added here |
+| `src/lib/providers.ts` | Streaming layer (Groq/OpenRouter via the `openai` package, Gemini via `@google/genai`) |
+| `src/lib/ratelimit.ts` | Per-IP limits (minute/day) + global daily kill switch |
+| `src/lib/session.ts` | Anonymous session via httpOnly cookie — history works without login |
+| `src/app/api/chat/route.ts` | SSE streaming endpoint + message and usage persistence |
+| `src/app/page.tsx` | Chat with history (sidebar) and model picker |
+| `src/app/compare/page.tsx` | Side-by-side comparison of up to 3 models |
+| `src/app/usage/page.tsx` | Statistics for the last 7 days |
+| `src/app/audio/page.tsx` | Speech to text (Whisper) and text to speech (Kokoro) in the browser |
+| `src/app/images/page.tsx` | Image generation (Gemini, free tier) |
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Quota protection (public app without login)
 
-## Learn More
+- Per-IP limits: `RATE_LIMIT_PER_MINUTE` (10) and `RATE_LIMIT_PER_DAY` (200)
+- Global daily limit: `GLOBAL_DAILY_REQUEST_CAP` (5000) — kill switch for the whole platform
+- Everything is configured via `.env`
 
-To learn more about Next.js, take a look at the following resources:
+## Roadmap
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- [x] Phase 1 — Chat core: multi-model chat, history, comparison, statistics
+- [x] Phase 2 — Prompt Library (categories, templates with `{{variables}}`, personal prompts per session)
+- [x] Phase 3 — OCR with **Tesseract.js** (Bulgarian + English, fully in the browser — the image never leaves your computer)
+- [x] Phase 4 — Audio: speech to text with **Whisper** and text to speech with **Kokoro** (fully in the browser, Web Workers)
+- [x] Phase 5 — Image generation (Gemini free tier; images are never stored on the server)
