@@ -21,7 +21,7 @@ model Conversation {
   id        String    @id @default(cuid())
   sessionId String
   session   Session   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  title     String    @default("Нов разговор")
+  title     String    @default("New conversation")
   model     String
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -71,7 +71,7 @@ model Prompt {
   session   Session  @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   title     String
   content   String
-  category  String   @default("Общи")
+  category  String   @default("General")
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 

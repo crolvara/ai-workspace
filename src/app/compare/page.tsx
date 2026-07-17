@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
+import { Square } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -168,7 +169,7 @@ export default function ComparePage() {
           />
           {isRunning ? (
             <Button variant="destructive" onClick={stop}>
-              ■ Stop
+              <Square className="size-4" /> Stop
             </Button>
           ) : (
             <Button

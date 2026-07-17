@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { getModel } from "@/lib/models";
 import {
   missingKeyMessage,
+  sanitizeHistory,
   streamChat,
   type ChatMessageInput,
   type UsageOut,
@@ -94,7 +95,9 @@ export async function POST(req: NextRequest) {
         data: {
           sessionId: session.id,
           model: model.key,
-          title: message.slice(0, 60),
+          // Spread to code points so a 60-char cut never splits a surrogate
+          // pair (emoji) into a lone half that renders as �.
+          title: [...message].slice(0, 60).join(""),
         },
       });
       convId = conversation.id;
@@ -106,7 +109,7 @@ export async function POST(req: NextRequest) {
   }
 
   const providerMessages: ChatMessageInput[] = [
-    ...history,
+    ...sanitizeHistory(history),
     { role: "user", content: message },
   ];
 

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Mic, Square } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -135,7 +136,17 @@ export function SttTool() {
       toast.error("Microphone unavailable. Allow access in your browser.");
       return;
     }
-    const recorder = new MediaRecorder(stream);
+    // MediaRecorder can throw on browsers that don't support it (or the default
+    // mime type). Guard so a failure releases the just-opened mic track instead
+    // of leaving the recording indicator on with no way to stop it.
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(stream);
+    } catch {
+      stream.getTracks().forEach((t) => t.stop());
+      toast.error("Recording is not supported in this browser.");
+      return;
+    }
     chunksRef.current = [];
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunksRef.current.push(e.data);
@@ -227,7 +238,15 @@ export function SttTool() {
           disabled={isBusy}
           onClick={() => (isRecording ? stopRecording() : void startRecording())}
         >
-          {isRecording ? `■ Stop recording (${recordLabel})` : "● Record from microphone"}
+          {isRecording ? (
+            <>
+              <Square className="size-4" /> Stop recording ({recordLabel})
+            </>
+          ) : (
+            <>
+              <Mic className="size-4" /> Record from microphone
+            </>
+          )}
         </Button>
       </div>
 

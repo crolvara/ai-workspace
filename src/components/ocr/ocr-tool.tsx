@@ -63,6 +63,11 @@ export function OcrTool() {
   // Lets runOcr's stable useCallback trigger the always-fresh cleanup closure
   // without pulling it into the callback's dependency list (stale-closure trap).
   const structureRef = useRef<(source?: string) => void>(() => {});
+  // Aborts an in-flight AI-cleanup stream (e.g. on unmount) so it stops burning
+  // free-tier quota and doesn't setText on an unmounted component.
+  const cleanupAbortRef = useRef<AbortController | null>(null);
+
+  useEffect(() => () => cleanupAbortRef.current?.abort(), []);
 
   const runOcr = useCallback(async (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -163,6 +168,8 @@ export function OcrTool() {
     }
 
     setIsStructuring(true);
+    const controller = new AbortController();
+    cleanupAbortRef.current = controller;
     let cleaned = "";
     try {
       const res = await fetch("/api/chat", {
@@ -174,6 +181,7 @@ export function OcrTool() {
           // Don't persist this as a conversation — it's a one-off cleanup pass.
           ephemeral: true,
         }),
+        signal: controller.signal,
       });
 
       if (!res.ok) {
@@ -207,10 +215,13 @@ export function OcrTool() {
         toast.error("Cleanup returned an empty result. Please try again.");
       }
     } catch (err) {
+      // Aborted (component unmounting) — leave state alone, nothing to restore.
+      if (err instanceof DOMException && err.name === "AbortError") return;
       console.error("OCR cleanup failed:", err);
       setText(original);
       toast.error("Cleanup failed. Please try again.");
     } finally {
+      if (cleanupAbortRef.current === controller) cleanupAbortRef.current = null;
       setIsStructuring(false);
     }
   }

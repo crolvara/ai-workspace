@@ -112,6 +112,38 @@ async function* streamGemini(
   }
 }
 
+/**
+ * Normalise fetched history into a valid alternating [user, assistant, …]
+ * sequence so the new user turn can be appended cleanly.
+ *
+ * Two things break otherwise: a failed/empty assistant turn persists only the
+ * user row (dangling user message), and the 30-message window can begin on an
+ * assistant message. Both yield assistant-leading or non-alternating contents
+ * that strict providers (Gemini) reject, wedging the conversation. We drop
+ * leading assistant messages, collapse same-role runs to the latest message,
+ * and drop a trailing user message so the result always ends on an assistant
+ * turn — ready for a fresh user message to follow.
+ */
+export function sanitizeHistory(
+  messages: ChatMessageInput[],
+): ChatMessageInput[] {
+  const result: ChatMessageInput[] = [];
+  for (const m of messages) {
+    const last = result[result.length - 1];
+    if (!last) {
+      if (m.role === "user") result.push(m); // must start with a user turn
+      continue;
+    }
+    if (last.role === m.role) {
+      result[result.length - 1] = m; // collapse a same-role run to the latest
+    } else {
+      result.push(m);
+    }
+  }
+  if (result[result.length - 1]?.role === "user") result.pop();
+  return result;
+}
+
 export function streamChat(
   model: ModelDef,
   messages: ChatMessageInput[],

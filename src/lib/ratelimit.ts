@@ -61,10 +61,44 @@ function memoryIncr(key: string, ttlSeconds: number): number {
   return entry.count;
 }
 
+/**
+ * Resolve once the client is usable. On a fresh serverless instance the client
+ * is still "connecting" during the first request; a plain `status === "ready"`
+ * guard would silently drop that request to the in-memory limiter (not counted
+ * toward the shared global cap). We wait briefly for readiness, but reject fast
+ * on a connection error so a genuinely-down Redis falls back without stalling.
+ */
+function waitForReady(redis: Redis, ms: number): Promise<void> {
+  if (redis.status === "ready") return Promise.resolve();
+  if (redis.status === "end") return Promise.reject(new Error("redis closed"));
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      clearTimeout(timer);
+      redis.off("ready", onReady);
+      redis.off("error", onError);
+    };
+    const onReady = () => {
+      cleanup();
+      resolve();
+    };
+    const onError = (err: Error) => {
+      cleanup();
+      reject(err);
+    };
+    const timer = setTimeout(() => {
+      cleanup();
+      reject(new Error("redis not ready"));
+    }, ms);
+    redis.once("ready", onReady);
+    redis.once("error", onError);
+  });
+}
+
 async function incr(key: string, ttlSeconds: number): Promise<number> {
   const redis = getRedis();
-  if (redis && redis.status === "ready") {
+  if (redis) {
     try {
+      await waitForReady(redis, 1000);
       const count = await redis.incr(key);
       if (count === 1) {
         // Keys are window-scoped, so a lost EXPIRE merely leaks one key until
@@ -136,7 +170,9 @@ export async function checkRateLimit(ip: string): Promise<RateLimitResult> {
 export function clientIpFrom(headers: Headers): string {
   const forwarded = headers.get("x-forwarded-for");
   if (forwarded) {
-    return forwarded.split(",")[0]!.trim();
+    const first = forwarded.split(",")[0]!.trim();
+    // A present-but-empty header must not collapse every caller into one "" bucket.
+    if (first) return first;
   }
   return headers.get("x-real-ip") ?? "local";
 }
