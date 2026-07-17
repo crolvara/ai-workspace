@@ -73,12 +73,16 @@ export async function POST(req: NextRequest) {
       .catch(() => {});
 
     // Missing-key errors are already user-facing; hide the rest.
+    // Note: do NOT use a gateway-class status (502/504) here — Cloudflare sits in
+    // front of the Vercel origin and replaces origin 502/504 with its own "Bad
+    // gateway" page, discarding this JSON body so the client never sees the message.
+    // 503 (config) / 500 (provider) pass through with the body intact.
     const isConfigError = messageText.startsWith("Missing API key");
-    return jsonError(
-      502,
-      isConfigError
-        ? messageText
-        : "Image generation failed. Please try again or switch to another model.",
-    );
+    return isConfigError
+      ? jsonError(503, messageText)
+      : jsonError(
+          500,
+          "Image generation failed. Please try again or switch to another model.",
+        );
   }
 }

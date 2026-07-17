@@ -1,4 +1,4 @@
-export type ProviderId = "groq" | "openrouter" | "gemini";
+export type ProviderId = "groq" | "openrouter" | "gemini" | "cloudflare";
 
 export interface ModelDef {
   /** Value sent to the provider API */
@@ -14,6 +14,7 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   groq: "Groq",
   openrouter: "OpenRouter",
   gemini: "Google Gemini",
+  cloudflare: "Cloudflare Workers AI",
 };
 
 /**
@@ -86,28 +87,23 @@ export function getModel(key: string): ModelDef | undefined {
 }
 
 /**
- * Free image-generation models. OpenRouter has no free image-output models
- * (catalog checked 2026-07: all are paid) — the Gemini API free tier is the
- * only free route. Same rotation rule: replace here when a model 404s.
+ * Free image-generation models. The Gemini API free tier dropped image models
+ * (returns 429 quota=0), and OpenRouter has no free image-output models — so the
+ * only working free route is Cloudflare Workers AI (free daily Neuron allocation).
+ * Needs CLOUDFLARE_ACCOUNT_ID + CLOUDFLARE_API_TOKEN. Same rotation rule: replace
+ * here when a model id is retired. `id` is the Workers AI model path.
  */
 export const IMAGE_MODELS: ModelDef[] = [
   {
-    key: "gemini/2.5-flash-image",
-    id: "gemini-2.5-flash-image",
-    provider: "gemini",
-    label: "Gemini 2.5 Flash Image",
-    description: "Nano Banana — Google's proven image generator",
-  },
-  {
-    key: "gemini/3.1-flash-image",
-    id: "gemini-3.1-flash-image",
-    provider: "gemini",
-    label: "Gemini 3.1 Flash Image",
-    description: "Google's newest image model",
+    key: "cloudflare/flux-1-schnell",
+    id: "@cf/black-forest-labs/flux-1-schnell",
+    provider: "cloudflare",
+    label: "FLUX.1 [schnell]",
+    description: "Black Forest Labs — fast, high-quality, free via Cloudflare",
   },
 ];
 
-export const DEFAULT_IMAGE_MODEL_KEY = "gemini/2.5-flash-image";
+export const DEFAULT_IMAGE_MODEL_KEY = "cloudflare/flux-1-schnell";
 
 export function getImageModel(key: string): ModelDef | undefined {
   return IMAGE_MODELS.find((m) => m.key === key);

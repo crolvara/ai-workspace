@@ -17,14 +17,19 @@ const PROVIDER_KEY_ENV: Record<ProviderId, string> = {
   groq: "GROQ_API_KEY",
   openrouter: "OPENROUTER_API_KEY",
   gemini: "GEMINI_API_KEY",
+  // Cloudflare also needs CLOUDFLARE_ACCOUNT_ID — see missingKeyMessage.
+  cloudflare: "CLOUDFLARE_API_TOKEN",
 };
 
 /**
- * User-facing config error when the provider's API key is not set,
- * or null when the key is present. Routes check this up front so a missing
- * key fails fast instead of surfacing as a generic mid-stream error.
+ * User-facing config error when the provider's credentials are not set,
+ * or null when present. Routes check this up front so a missing key fails fast
+ * instead of surfacing as a generic mid-stream error.
  */
 export function missingKeyMessage(provider: ProviderId): string | null {
+  if (provider === "cloudflare" && !process.env.CLOUDFLARE_ACCOUNT_ID) {
+    return "Missing API key: set CLOUDFLARE_ACCOUNT_ID in .env.";
+  }
   const name = PROVIDER_KEY_ENV[provider];
   return process.env[name] ? null : `Missing API key: set ${name} in .env.`;
 }
@@ -127,13 +132,72 @@ export interface GeneratedImage {
   usage: UsageOut;
 }
 
-export async function generateImage(
+/** Wall-clock cap so a stuck upstream can't run into the serverless timeout. */
+const IMAGE_TIMEOUT_MS = 25_000;
+
+export function generateImage(
   model: ModelDef,
   prompt: string,
 ): Promise<GeneratedImage> {
-  if (model.provider !== "gemini") {
-    throw new Error(`Provider ${model.provider} does not support image generation`);
+  if (model.provider === "cloudflare") {
+    return generateImageCloudflare(model, prompt);
   }
+  if (model.provider === "gemini") {
+    return generateImageGemini(model, prompt);
+  }
+  throw new Error(`Provider ${model.provider} does not support image generation`);
+}
+
+/**
+ * Cloudflare Workers AI text-to-image (FLUX / SDXL). The REST run endpoint wraps
+ * the result as `{ result: { image: "<base64 jpeg>" } }`. Free daily Neuron
+ * allocation covers a couple hundred FLUX schnell images.
+ */
+async function generateImageCloudflare(
+  model: ModelDef,
+  prompt: string,
+): Promise<GeneratedImage> {
+  const accountId = requireKey("CLOUDFLARE_ACCOUNT_ID");
+  const token = requireKey("CLOUDFLARE_API_TOKEN");
+  const res = await fetch(
+    `https://api.cloudflare.com/client/v4/accounts/${accountId}/ai/run/${model.id}`,
+    {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ prompt, steps: 4 }),
+      signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+    },
+  );
+
+  if (!res.ok) {
+    const detail = await res.text().catch(() => "");
+    // Surface the raw provider error to UsageLog; the route hides it from users.
+    throw new Error(`Cloudflare Workers AI ${res.status}: ${detail.slice(0, 300)}`);
+  }
+
+  const json = (await res.json()) as {
+    result?: { image?: string };
+  };
+  const imageBase64 = json.result?.image;
+  if (!imageBase64) {
+    throw new Error("The model did not return an image. Please try a different prompt.");
+  }
+  return {
+    // Workers AI returns base64 JPEG.
+    dataUrl: `data:image/jpeg;base64,${imageBase64}`,
+    text: "",
+    // Workers AI does not report token usage.
+    usage: { inputTokens: 0, outputTokens: 0 },
+  };
+}
+
+async function generateImageGemini(
+  model: ModelDef,
+  prompt: string,
+): Promise<GeneratedImage> {
   const ai = new GoogleGenAI({ apiKey: requireKey("GEMINI_API_KEY") });
   const response = await ai.models.generateContent({
     model: model.id,
