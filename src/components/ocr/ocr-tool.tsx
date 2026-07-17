@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Sparkles } from "lucide-react";
@@ -60,6 +60,9 @@ export function OcrTool() {
   const [isStructuring, setIsStructuring] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Lets runOcr's stable useCallback trigger the always-fresh cleanup closure
+  // without pulling it into the callback's dependency list (stale-closure trap).
+  const structureRef = useRef<(source?: string) => void>(() => {});
 
   const runOcr = useCallback(async (file: File) => {
     if (!ACCEPTED_TYPES.includes(file.type)) {
@@ -96,8 +99,18 @@ export function OcrTool() {
       });
       try {
         const result = await worker.recognize(file);
-        setText(result.data.text.trim());
+        const recognized = result.data.text.trim();
         setPhase({ name: "done" });
+        // Auto-clean the raw recognition so the user gets structured text
+        // directly instead of the noisy OCR output. The cleanup streams into the
+        // (still empty) textarea and reveals the raw text if it fails, so we
+        // deliberately do NOT setText(recognized) here — that would flash the
+        // garbled version before the cleaned one replaces it.
+        if (recognized) {
+          structureRef.current(recognized);
+        } else {
+          setText(recognized);
+        }
       } finally {
         await worker.terminate();
       }
@@ -134,23 +147,23 @@ export function OcrTool() {
     }
   }
 
-  async function structureWithAI() {
-    const raw = text.trim();
+  // `source` is passed by the auto-clean path (state isn't updated yet right
+  // after recognition); the manual button omits it and cleans the current text.
+  async function structureWithAI(source?: string) {
+    const original = source ?? text;
+    const raw = original.trim();
     if (!raw || isStructuring) return;
     if (raw.length > MAX_STRUCTURE_INPUT) {
+      // Reveal the raw text (the auto path hasn't shown it yet) instead of cleaning.
+      setText(original);
       toast.error(
         `The text is too long to clean up automatically (over ${MAX_STRUCTURE_INPUT} characters).`,
       );
       return;
     }
 
-    // Keep the raw recognition so a mid-stream failure can restore it — we
-    // overwrite the textarea live while streaming, so an error partway through
-    // would otherwise leave the user with half-cleaned text and no original.
-    const original = text;
     setIsStructuring(true);
     let cleaned = "";
-    let started = false;
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -167,41 +180,45 @@ export function OcrTool() {
         const { error } = (await res.json().catch(() => ({}))) as {
           error?: string;
         };
+        setText(original);
         toast.error(error ?? "Cleanup failed. Please try again.");
         return;
       }
 
+      // We overwrite the textarea live as chunks arrive (the value is controlled
+      // by `text`, so each setText replaces whatever was shown). On ANY failure
+      // we restore `original` so the user is never left with half-cleaned text
+      // or — on the auto path — an empty box.
       for await (const event of readChatStream(res)) {
         if (event.type === "delta") {
-          if (!started) {
-            // Replace the raw text once the first chunk arrives, then stream in.
-            started = true;
-            cleaned = event.text;
-          } else {
-            cleaned += event.text;
-          }
+          cleaned += event.text;
           setText(cleaned);
         } else if (event.type === "error") {
-          if (started) setText(original);
+          setText(original);
           toast.error(event.message);
           return;
         }
       }
+
       if (cleaned.trim()) {
         toast.success("Text cleaned up.");
-      } else if (started) {
-        // The model streamed only whitespace — don't leave an empty textarea.
+      } else {
         setText(original);
         toast.error("Cleanup returned an empty result. Please try again.");
       }
     } catch (err) {
       console.error("OCR cleanup failed:", err);
-      if (started) setText(original);
+      setText(original);
       toast.error("Cleanup failed. Please try again.");
     } finally {
       setIsStructuring(false);
     }
   }
+  // Keep the ref pointing at the current-render closure so runOcr's stable
+  // callback always calls the latest one (updated after every render).
+  useEffect(() => {
+    structureRef.current = structureWithAI;
+  });
 
   const isBusy = phase.name === "loading" || phase.name === "recognizing";
   // Also block starting a new recognition while a cleanup stream is writing to
@@ -292,7 +309,11 @@ export function OcrTool() {
                 rows={12}
                 disabled={isStructuring}
                 placeholder={
-                  isBusy ? "Recognizing…" : "The recognized text will appear here"
+                  isBusy
+                    ? "Recognizing…"
+                    : isStructuring
+                      ? "Cleaning up…"
+                      : "The recognized text will appear here"
                 }
                 className="flex-1 resize-none font-mono text-xs"
               />
