@@ -6,6 +6,13 @@ import { generateImage } from "@/lib/providers";
 import { checkRateLimit, clientIpFrom } from "@/lib/ratelimit";
 import { getOrCreateSession } from "@/lib/session";
 
+// Image generation runs ~2–5s but can spike under load. Vercel's default function
+// cap (10s on Hobby) would kill a slow request mid-flight, and the Cloudflare proxy
+// in front then surfaces its own gateway 502 — exactly the error we return 500 to
+// avoid. Give the function 30s so the provider's 25s internal timeout (see
+// IMAGE_TIMEOUT_MS) fires first and returns the graceful JSON error instead.
+export const maxDuration = 30;
+
 const MAX_PROMPT_LENGTH = 2000;
 
 const bodySchema = z.object({

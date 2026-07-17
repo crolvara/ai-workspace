@@ -149,9 +149,13 @@ export function generateImage(
 }
 
 /**
- * Cloudflare Workers AI text-to-image (FLUX / SDXL). The REST run endpoint wraps
- * the result as `{ result: { image: "<base64 jpeg>" } }`. Free daily Neuron
- * allocation covers a couple hundred FLUX schnell images.
+ * Cloudflare Workers AI text-to-image, FLUX family only. The FLUX models
+ * (`flux-1-schnell`, FLUX.2 klein/dev) wrap the result as JSON
+ * `{ result: { image: "<base64 jpeg>" } }`. WARNING: the SDXL / Stable Diffusion
+ * models on Workers AI return a raw binary PNG body instead (content-type
+ * image/png, no JSON) — adding one to IMAGE_MODELS would break the JSON parse
+ * below and needs a separate binary branch. Free daily Neuron allocation covers a
+ * couple hundred FLUX schnell images.
  */
 async function generateImageCloudflare(
   model: ModelDef,
@@ -178,9 +182,17 @@ async function generateImageCloudflare(
     throw new Error(`Cloudflare Workers AI ${res.status}: ${detail.slice(0, 300)}`);
   }
 
+  // A 200 can still carry a Workers AI failure (`success:false`), in which case
+  // `result` is null — surface the reported error rather than blaming the prompt.
   const json = (await res.json()) as {
-    result?: { image?: string };
+    result?: { image?: string } | null;
+    success?: boolean;
+    errors?: Array<{ message?: string }>;
   };
+  if (json.success === false) {
+    const detail = json.errors?.map((e) => e.message).filter(Boolean).join("; ");
+    throw new Error(`Cloudflare Workers AI error: ${detail || "unknown"}`);
+  }
   const imageBase64 = json.result?.image;
   if (!imageBase64) {
     throw new Error("The model did not return an image. Please try a different prompt.");

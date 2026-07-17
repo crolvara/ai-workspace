@@ -3,13 +3,39 @@
 import { useCallback, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { CHAT_DRAFT_KEY } from "@/lib/prompts";
+import { DEFAULT_MODEL_KEY } from "@/lib/models";
+import { readChatStream } from "@/lib/sse-client";
 import { cn } from "@/lib/utils";
 
 const MAX_FILE_MB = 15;
 const ACCEPTED_TYPES = ["image/png", "image/jpeg", "image/webp", "image/bmp"];
+
+// The chat route caps a single message at 8000 chars; leave room for the prompt.
+const MAX_STRUCTURE_INPUT = 7000;
+
+/**
+ * Instructs a chat model to clean OCR noise (stray glyphs, broken line breaks,
+ * UI chrome captured from the screenshot) without translating or rewriting.
+ * Sent as a plain user message because /api/chat takes no system prompt.
+ */
+function buildStructurePrompt(raw: string): string {
+  return `You are a text-cleanup assistant. The text below was extracted by OCR from a screenshot and contains recognition noise: stray foreign characters, broken line breaks, and garbled fragments (browser/app UI, toolbar glyphs, page chrome). Reconstruct the intended document text.
+
+Rules:
+- Remove OCR artifacts, stray symbols, and fragments that are clearly not part of the document (browser or app UI, toolbar icons, tab titles, page chrome).
+- Fix line breaks and paragraph structure; keep real paragraphs and lists.
+- Do NOT translate, rephrase, summarize, or add anything — preserve the original wording and language.
+- Output only the cleaned text, with no explanations, headings, or code fences.
+
+OCR text:
+"""
+${raw}
+"""`;
+}
 
 type Phase =
   | { name: "idle" }
@@ -31,6 +57,7 @@ export function OcrTool() {
   const [phase, setPhase] = useState<Phase>({ name: "idle" });
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [text, setText] = useState("");
+  const [isStructuring, setIsStructuring] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -87,6 +114,7 @@ export function OcrTool() {
   function onDrop(e: React.DragEvent) {
     e.preventDefault();
     setIsDragOver(false);
+    if (inputLocked) return;
     const file = e.dataTransfer.files[0];
     if (file) void runOcr(file);
   }
@@ -106,7 +134,79 @@ export function OcrTool() {
     }
   }
 
+  async function structureWithAI() {
+    const raw = text.trim();
+    if (!raw || isStructuring) return;
+    if (raw.length > MAX_STRUCTURE_INPUT) {
+      toast.error(
+        `The text is too long to clean up automatically (over ${MAX_STRUCTURE_INPUT} characters).`,
+      );
+      return;
+    }
+
+    // Keep the raw recognition so a mid-stream failure can restore it — we
+    // overwrite the textarea live while streaming, so an error partway through
+    // would otherwise leave the user with half-cleaned text and no original.
+    const original = text;
+    setIsStructuring(true);
+    let cleaned = "";
+    let started = false;
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: buildStructurePrompt(raw),
+          model: DEFAULT_MODEL_KEY,
+          // Don't persist this as a conversation — it's a one-off cleanup pass.
+          ephemeral: true,
+        }),
+      });
+
+      if (!res.ok) {
+        const { error } = (await res.json().catch(() => ({}))) as {
+          error?: string;
+        };
+        toast.error(error ?? "Cleanup failed. Please try again.");
+        return;
+      }
+
+      for await (const event of readChatStream(res)) {
+        if (event.type === "delta") {
+          if (!started) {
+            // Replace the raw text once the first chunk arrives, then stream in.
+            started = true;
+            cleaned = event.text;
+          } else {
+            cleaned += event.text;
+          }
+          setText(cleaned);
+        } else if (event.type === "error") {
+          if (started) setText(original);
+          toast.error(event.message);
+          return;
+        }
+      }
+      if (cleaned.trim()) {
+        toast.success("Text cleaned up.");
+      } else if (started) {
+        // The model streamed only whitespace — don't leave an empty textarea.
+        setText(original);
+        toast.error("Cleanup returned an empty result. Please try again.");
+      }
+    } catch (err) {
+      console.error("OCR cleanup failed:", err);
+      if (started) setText(original);
+      toast.error("Cleanup failed. Please try again.");
+    } finally {
+      setIsStructuring(false);
+    }
+  }
+
   const isBusy = phase.name === "loading" || phase.name === "recognizing";
+  // Also block starting a new recognition while a cleanup stream is writing to
+  // the textarea — otherwise the two overwrite each other's setText calls.
+  const inputLocked = isBusy || isStructuring;
 
   return (
     <div className="h-full overflow-y-auto">
@@ -117,7 +217,8 @@ export function OcrTool() {
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             Recognition (Bulgarian + English) runs entirely in your browser
-            with Tesseract — the image never leaves your computer.
+            with Tesseract — the image never leaves your computer. Clean up with
+            AI removes recognition noise and restores the structure.
           </p>
         </div>
 
@@ -128,11 +229,11 @@ export function OcrTool() {
           }}
           onDragLeave={() => setIsDragOver(false)}
           onDrop={onDrop}
-          onClick={() => !isBusy && inputRef.current?.click()}
+          onClick={() => !inputLocked && inputRef.current?.click()}
           className={cn(
             "flex min-h-40 cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed p-6 text-center transition-colors",
             isDragOver ? "border-primary bg-primary/5" : "hover:bg-accent/50",
-            isBusy && "pointer-events-none opacity-60",
+            inputLocked && "pointer-events-none opacity-60",
           )}
         >
           <input
@@ -189,21 +290,35 @@ export function OcrTool() {
                 value={text}
                 onChange={(e) => setText(e.target.value)}
                 rows={12}
+                disabled={isStructuring}
                 placeholder={
                   isBusy ? "Recognizing…" : "The recognized text will appear here"
                 }
                 className="flex-1 resize-none font-mono text-xs"
               />
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void structureWithAI()}
+                  disabled={!text.trim() || isStructuring}
+                >
+                  <Sparkles className="size-4" />
+                  {isStructuring ? "Cleaning up…" : "Clean up with AI"}
+                </Button>
                 <Button
                   size="sm"
                   variant="outline"
                   onClick={() => void copyText()}
-                  disabled={!text.trim()}
+                  disabled={!text.trim() || isStructuring}
                 >
                   Copy
                 </Button>
-                <Button size="sm" onClick={sendToChat} disabled={!text.trim()}>
+                <Button
+                  size="sm"
+                  onClick={sendToChat}
+                  disabled={!text.trim() || isStructuring}
+                >
                   To chat →
                 </Button>
               </div>
