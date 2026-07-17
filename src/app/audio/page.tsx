@@ -22,20 +22,20 @@ export default function AudioPage() {
             Audio — speech and voice
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Whisper (speech to text) and Kokoro (text to speech) run entirely
+            Kokoro (text to speech) and Whisper (speech to text) run entirely
             in your browser — no external services.
           </p>
         </div>
-        <Tabs defaultValue="stt">
+        <Tabs defaultValue="tts">
           <TabsList>
-            <TabsTrigger value="stt">Speech to text</TabsTrigger>
             <TabsTrigger value="tts">Text to speech</TabsTrigger>
+            <TabsTrigger value="stt">Speech to text</TabsTrigger>
           </TabsList>
-          <TabsContent value="stt">
-            <SttTool />
-          </TabsContent>
           <TabsContent value="tts">
             <TtsTool />
+          </TabsContent>
+          <TabsContent value="stt">
+            <SttTool />
           </TabsContent>
         </Tabs>
       </div>
