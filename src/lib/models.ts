@@ -8,6 +8,13 @@ export interface ModelDef {
   provider: ProviderId;
   label: string;
   description: string;
+  /**
+   * Reasoning model (emits internal <think>…</think> deliberation). For Groq
+   * models this makes providers.ts send `reasoning_format: "hidden"` so the
+   * thinking never reaches the UI. Do NOT set it on non-reasoning Groq models —
+   * Groq rejects the param with a 400 there.
+   */
+  reasoning?: boolean;
 }
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
@@ -20,14 +27,17 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
 /**
  * Free models only. Groq and OpenRouter rotate their free catalogs a few times
  * a year — when a model starts returning 404/410, replace it here.
+ * Groq decommissions so far: llama-4-scout (18.07.2026, no notice),
+ * llama-3.3-70b-versatile (16.08.2026, email notice) — both were in this list.
  */
 export const MODELS: ModelDef[] = [
   {
-    key: "groq/llama-3.3-70b",
-    id: "llama-3.3-70b-versatile",
+    key: "groq/gpt-oss-120b",
+    id: "openai/gpt-oss-120b",
     provider: "groq",
-    label: "Llama 3.3 70B",
-    description: "Groq's best all-round model — fast and capable",
+    label: "GPT OSS 120B",
+    description: "Groq's best all-round model — OpenAI open weights",
+    reasoning: true,
   },
   {
     key: "groq/llama-3.1-8b",
@@ -37,11 +47,12 @@ export const MODELS: ModelDef[] = [
     description: "Very fast, for simple tasks",
   },
   {
-    key: "groq/qwen3-32b",
-    id: "qwen/qwen3-32b",
+    key: "groq/qwen3.6-27b",
+    id: "qwen/qwen3.6-27b",
     provider: "groq",
-    label: "Qwen 3 32B",
+    label: "Qwen 3.6 27B",
     description: "Strong at reasoning and code",
+    reasoning: true,
   },
   {
     key: "openrouter/deepseek-v3",
@@ -55,7 +66,7 @@ export const MODELS: ModelDef[] = [
     id: "meta-llama/llama-3.3-70b-instruct:free",
     provider: "openrouter",
     label: "Llama 3.3 70B (OR)",
-    description: "The same Llama, fallback route via OpenRouter",
+    description: "Meta's Llama via OpenRouter (gone from Groq since 16.08.2026)",
   },
   {
     key: "openrouter/gemma-3-27b",
@@ -80,7 +91,7 @@ export const MODELS: ModelDef[] = [
   },
 ];
 
-export const DEFAULT_MODEL_KEY = "groq/llama-3.3-70b";
+export const DEFAULT_MODEL_KEY = "groq/gpt-oss-120b";
 
 export function getModel(key: string): ModelDef | undefined {
   return MODELS.find((m) => m.key === key);

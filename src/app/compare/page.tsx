@@ -23,7 +23,7 @@ interface CompareResult {
 
 export default function ComparePage() {
   const [selected, setSelected] = useState<string[]>([
-    "groq/llama-3.3-70b",
+    "groq/gpt-oss-120b",
     "gemini/2.5-flash",
   ]);
   const [prompt, setPrompt] = useState("");

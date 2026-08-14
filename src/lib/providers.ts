@@ -68,6 +68,15 @@ async function* streamOpenAiCompatible(
       messages,
       stream: true,
       stream_options: { include_usage: true },
+      // Groq reasoning models (gpt-oss, qwen) otherwise put their internal
+      // <think>…</think> deliberation in the streamed content and it reaches
+      // the UI verbatim. "hidden" keeps only the final answer. Sent ONLY for
+      // flagged Groq models — Groq 400s on the param for non-reasoning models,
+      // and OpenRouter does not accept it at all. The param is Groq-specific,
+      // hence the cast past the openai SDK types.
+      ...(model.provider === "groq" && model.reasoning
+        ? ({ reasoning_format: "hidden" } as object)
+        : {}),
     },
     { signal },
   );

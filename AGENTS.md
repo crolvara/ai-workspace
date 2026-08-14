@@ -8,7 +8,7 @@ Confirmed for Next 16.2: `cookies()` is async; route handler `params` is a `Prom
 
 # AI Workspace — project rules
 
-Public platform, **no auth, no billing**. Anonymous httpOnly cookie session (`aiw_sid`) gives per-browser history. Everything is **English**: UI text, validation and error messages, code, identifiers, commits and logs (English-only UI decided 2026-07 — do not reintroduce Bulgarian strings).
+Public platform, **no auth, no billing**. Anonymous httpOnly cookie session (`aiw_sid`) gives per-browser history. Everything is **English**: UI text, validation and error messages, code, identifiers, commits and logs (English-only UI decided 2026-07 — do not reintroduce Bulgarian strings). This includes **Prisma `@default(...)` column values** (`schema.prisma`): they were Bulgarian (`"Нов разговор"`, `"Общи"`) until 2026-07-17 even though code always overwrites them — English defaults now, keep it that way for any new column.
 
 All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library, OCR, Audio (STT/TTS), Images.
 
@@ -19,7 +19,7 @@ All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library
 - Top nav is `src/components/nav-links.tsx` (client component, `usePathname` active pill). New pages must be added to its `NAV_LINKS`.
 - Icons come from `lucide-react` — no ASCII/emoji glyphs (✕, ■, ☰) in the UI.
 - The shadcn primitives are **Base UI** (`@base-ui/react`), not Radix — triggers/options/menu items render as `<div>`s with ARIA roles, not native buttons.
-- `<SelectValue>` must get explicit children (label looked up by value, see `chat-app.tsx`) — otherwise the closed trigger shows the raw key (`groq/llama-3.3-70b`) because portal-mounted items haven't registered their labels yet.
+- `<SelectValue>` must get explicit children (label looked up by value, see `chat-app.tsx`) — otherwise the closed trigger shows the raw key (`groq/gpt-oss-120b`) because portal-mounted items haven't registered their labels yet.
 - `SelectContent` defaults to Base UI's `alignItemWithTrigger` (selected item overlays the trigger), which spills past the viewport edge when the trigger sits near it — for selects close to the bottom (e.g. the chat model picker) pass `side="top" alignItemWithTrigger={false}`.
 - Tailwind 4 preflight sets `cursor: default` on buttons; `globals.css` `@layer base` has a zero-specificity `:where(...)` rule restoring `cursor: pointer` on all enabled interactive elements (button + ARIA roles button/combobox/option/menuitem*/tab). Don't sprinkle `cursor-pointer` per component — new interactive elements are covered as long as they're a `<button>` or carry one of those roles.
 - Microcopy: sentence case, concise, no exclamation marks; users are addressed directly ("Describe the image you want…").
@@ -75,13 +75,13 @@ All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library
 
 - Every model-calling endpoint must go through `checkRateLimit()` (`src/lib/ratelimit.ts`): per-IP minute/day limits + global daily kill switch, all tunable via `RATE_LIMIT_PER_MINUTE` / `RATE_LIMIT_PER_DAY` / `GLOBAL_DAILY_REQUEST_CAP`.
 - The tiers are checked **sequentially** (minute → day → global) so a denied request never consumes the next tier's quota — spam must not be able to drain the global cap. Keys are window-scoped (`rl:min:<epoch-minute>:<ip>`), so a lost Redis EXPIRE can't block an IP forever; day keys use Europe/Sofia local time.
-- Redis-backed when `REDIS_URL` is set, in-memory fallback otherwise (dev only — not valid for multi-instance).
+- Redis-backed when `REDIS_URL` is set, in-memory fallback otherwise (dev only — not valid for multi-instance). `incr()` waits (≤1s) for the client to reach `ready` via `waitForReady()` before falling back — a fresh serverless instance is still `connecting` on its first request, and a bare `status === "ready"` guard would silently drop that request to the in-memory limiter (uncounted against the shared global cap). The wait rejects fast on a connection `error`, so a genuinely-down Redis still falls back without stalling.
 - `x-forwarded-for` is trusted for per-IP limits — deploy only behind a proxy that overwrites it; the global cap is the backstop against spoofing.
 
 ## Data access rules
 
 - Every Conversation/Message/Prompt query **must be scoped by `sessionId`** from `getOrCreateSession()` — never trust a bare id from the client (use `updateMany`/`deleteMany` with both id and sessionId).
-- `getOrCreateSession()` may set cookies → call it only from route handlers / server actions.
+- `getOrCreateSession()` may set cookies → call it only from route handlers / server actions. It re-sets the `aiw_sid` cookie on **every** call (not just on creation) to slide the 1-year `maxAge`, so an active user's session never expires out from under them.
 - Every completed or failed model call writes a `UsageLog` row — that powers `/usage`.
 - Generated images are **never persisted** — they return to the client as data URLs; only the `UsageLog` row remains.
 - Built-in prompt templates are code (`src/lib/prompts.ts`, `{{variable}}` syntax); user prompts are session-scoped DB rows.
@@ -90,6 +90,7 @@ All 5 roadmap phases are complete: Chat (+history/compare/usage), Prompt Library
 
 - `/api/chat` — SSE, `data:`-framed JSON events in order: `meta` (conversationId, model) → `delta` (text chunks) → `done` (usage, latencyMs) | `error` (user-facing message). `ephemeral: true` skips all persistence except `UsageLog` (used by `/compare`). Client parser: `src/lib/sse-client.ts`.
   - Client disconnect/abort is propagated to the provider via `req.signal`; partial assistant text is still persisted, and a DB failure after a completed stream must NOT become an `error` event (the client keeps partial text on error). Missing API key fails fast with 503 before anything is persisted.
+  - History fetched from the DB is passed through `sanitizeHistory()` (`src/lib/providers.ts`) before it reaches the provider — do NOT remove this. A failed/empty assistant turn persists only the user row (line ordering: user is saved before streaming, assistant only if `fullText`), so a conversation can carry a **dangling user message**, and the 30-message window can begin on an assistant message. Both yield assistant-leading or non-alternating `contents` that Gemini rejects, wedging the conversation on every retry. `sanitizeHistory` drops leading assistant messages, collapses same-role runs, and drops a trailing user message so history always ends on an assistant turn.
 - `/api/image` — plain JSON: POST `{prompt ≤2000, model}` → `{image: dataURL, text, latencyMs}` or `{error}` (user-facing message; **500** on provider failure, **503** on missing key); same rate limit → session → UsageLog flow. Do NOT return a gateway-class status (502/504) here: Cloudflare fronts the Vercel origin and replaces origin 502/504 with its own "Bad gateway" page, dropping the JSON body so the client never sees `{error}` (this was the old bug — the user got a raw Cloudflare 502 instead of the graceful message).
 - `/api/session` — GET, just ensures the anonymous cookie exists; pages that fan out parallel first-visit requests (e.g. `/compare`) call it once first to avoid racing session creation.
 
