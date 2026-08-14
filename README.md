@@ -23,7 +23,7 @@
 
 | Page | Description |
 |---|---|
-| **Chat** | Streaming chat (SSE) with free models from Groq, OpenRouter and Gemini, with per-browser conversation history — no account needed |
+| **Chat** | Streaming chat (SSE) with free models on Groq — incl. an agentic model with built-in web search — with per-browser conversation history, no account needed |
 | **Compare** | Ask once, get side-by-side answers from up to 3 models with latency and token stats |
 | **Prompts** | Prompt library — built-in templates with `{{variables}}` plus your own, saved per session |
 | **OCR** | Image → text with Tesseract.js, English + Bulgarian, **fully in the browser** — the image never leaves your machine |
@@ -38,7 +38,7 @@ Sessions are anonymous: an httpOnly cookie gives each browser its own history. N
 - **Next.js 16** (App Router, RSC, Route Handlers) · **React 19** · **Tailwind 4** · **shadcn/ui**
 - **PostgreSQL** ([Neon](https://neon.tech)) · **Prisma 7** (`@prisma/adapter-pg`)
 - **Redis 7** for rate limiting (in-memory fallback for dev)
-- Model providers (free tiers only): **Groq**, **OpenRouter** (`:free` models), **Google Gemini**
+- Model providers (free tiers only): **Groq** (chat), **Cloudflare Workers AI** (images)
 - In-browser ML: **Tesseract.js** (OCR), **Whisper** + **Kokoro** via `@huggingface/transformers` / `kokoro-js` (ONNX, WASM)
 
 ## Getting started
@@ -49,10 +49,8 @@ Prerequisites: Node.js 20+, a Postgres database (a free [Neon](https://neon.tech
 # 1. Configure environment
 cp .env.example .env
 #    → set DATABASE_URL / DIRECT_DATABASE_URL (Neon Postgres)
-#    → fill in the API keys (all three are free):
+#    → fill in the API key (free):
 #      GROQ_API_KEY       https://console.groq.com/keys
-#      OPENROUTER_API_KEY https://openrouter.ai/settings/keys
-#      GEMINI_API_KEY     https://aistudio.google.com/apikey
 
 # 2. Optional: Redis for rate limiting (in-memory fallback without it)
 docker compose up -d redis
@@ -83,7 +81,7 @@ Missing API keys don't break the app — the affected endpoints return a friendl
 | Path | Description |
 |---|---|
 | `src/lib/models.ts` | Model registry — add or replace models here, nothing else hardcodes model ids |
-| `src/lib/providers.ts` | Streaming layer (Groq/OpenRouter via the `openai` package with `baseURL` override, Gemini via `@google/genai`) |
+| `src/lib/providers.ts` | Streaming layer (Groq via the `openai` package with a `baseURL` override) |
 | `src/lib/ratelimit.ts` | Per-IP minute/day limits + global daily kill switch |
 | `src/lib/session.ts` | Anonymous session cookie — all data access is scoped by it |
 | `src/app/api/chat/route.ts` | SSE endpoint (`meta` → `delta`* → `done` \| `error`) with message + usage persistence |
@@ -105,7 +103,7 @@ RATE_LIMIT_PER_MINUTE=10   RATE_LIMIT_PER_DAY=200   GLOBAL_DAILY_REQUEST_CAP=500
 
 ### A note on image generation
 
-As of July 2026 there is **no free image-generation route**: the Gemini API free tier no longer includes image models, and OpenRouter's catalog has no free image-output models. The Images page ships anyway and returns a graceful error until a free provider appears — model registries live in `src/lib/models.ts`, so wiring one up is a one-line change.
+The only working free image-generation route is **Cloudflare Workers AI** (FLUX.1 schnell, free daily Neuron allocation) — the Gemini API free tier dropped image models and OpenRouter's catalog has no free image-output models (both providers were removed from this app on 15.08.2026). Model registries live in `src/lib/models.ts`, so adding another provider is a small, localized change.
 
 ## License
 

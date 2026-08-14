@@ -3,7 +3,7 @@ import { ImageTool } from "@/components/images/image-tool";
 
 export const metadata: Metadata = {
   title: "Images — AI Workspace",
-  description: "Image generation with the free Google Gemini models",
+  description: "Image generation with free models on Cloudflare Workers AI",
 };
 
 export default function ImagesPage() {
@@ -15,9 +15,9 @@ export default function ImagesPage() {
             Image generation
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Create an image from a text description with the free Google Gemini
-            image models. Generated images are not stored on the server —
-            download them if you want to keep them.
+            Create an image from a text description with the free image models
+            on Cloudflare Workers AI. Generated images are not stored on the
+            server — download them if you want to keep them.
           </p>
         </div>
         <ImageTool />

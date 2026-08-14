@@ -37,7 +37,8 @@ interface ChatMessage {
   latencyMs?: number | null;
 }
 
-const PROVIDERS_IN_ORDER: ProviderId[] = ["groq", "openrouter", "gemini"];
+// OpenRouter and Gemini were removed 15.08.2026 — chat is Groq-only now.
+const PROVIDERS_IN_ORDER: ProviderId[] = ["groq"];
 
 const STARTER_PROMPTS = [
   "Explain how HTTPS works in simple terms",

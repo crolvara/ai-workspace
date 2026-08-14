@@ -1,4 +1,7 @@
-export type ProviderId = "groq" | "openrouter" | "gemini" | "cloudflare";
+// OpenRouter and Gemini were REMOVED 15.08.2026 (they stopped working; chat is
+// Groq-only now). Historic UsageLog rows still carry "openrouter"/"gemini" as
+// raw strings — /usage falls back to the raw value when a label is missing.
+export type ProviderId = "groq" | "cloudflare";
 
 export interface ModelDef {
   /** Value sent to the provider API */
@@ -19,16 +22,16 @@ export interface ModelDef {
 
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   groq: "Groq",
-  openrouter: "OpenRouter",
-  gemini: "Google Gemini",
   cloudflare: "Cloudflare Workers AI",
 };
 
 /**
- * Free models only. Groq and OpenRouter rotate their free catalogs a few times
- * a year — when a model starts returning 404/410, replace it here.
- * Groq decommissions so far: llama-4-scout (18.07.2026, no notice),
- * llama-3.3-70b-versatile (16.08.2026, email notice) — both were in this list.
+ * Free models only, Groq-only since 15.08.2026. Groq rotates its free catalog —
+ * when a model starts returning 404/410, replace it here (live list:
+ * `curl -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models`).
+ * Decommissions so far: llama-4-scout (18.07.2026, no notice),
+ * llama-3.3-70b-versatile (16.08.2026, email notice), qwen/qwen3-32b
+ * (silently, ~July 2026) — all three were in this list at the time.
  */
 export const MODELS: ModelDef[] = [
   {
@@ -37,6 +40,14 @@ export const MODELS: ModelDef[] = [
     provider: "groq",
     label: "GPT OSS 120B",
     description: "Groq's best all-round model — OpenAI open weights",
+    reasoning: true,
+  },
+  {
+    key: "groq/gpt-oss-20b",
+    id: "openai/gpt-oss-20b",
+    provider: "groq",
+    label: "GPT OSS 20B",
+    description: "Smaller and faster sibling of GPT OSS 120B",
     reasoning: true,
   },
   {
@@ -55,39 +66,15 @@ export const MODELS: ModelDef[] = [
     reasoning: true,
   },
   {
-    key: "openrouter/deepseek-v3",
-    id: "deepseek/deepseek-chat-v3-0324:free",
-    provider: "openrouter",
-    label: "DeepSeek V3",
-    description: "DeepSeek's flagship, free via OpenRouter",
-  },
-  {
-    key: "openrouter/llama-3.3-70b",
-    id: "meta-llama/llama-3.3-70b-instruct:free",
-    provider: "openrouter",
-    label: "Llama 3.3 70B (OR)",
-    description: "Meta's Llama via OpenRouter (gone from Groq since 16.08.2026)",
-  },
-  {
-    key: "openrouter/gemma-3-27b",
-    id: "google/gemma-3-27b-it:free",
-    provider: "openrouter",
-    label: "Gemma 3 27B",
-    description: "Google's open-weights model",
-  },
-  {
-    key: "gemini/2.5-flash",
-    id: "gemini-2.5-flash",
-    provider: "gemini",
-    label: "Gemini 2.5 Flash",
-    description: "Google's fast multimodal model",
-  },
-  {
-    key: "gemini/2.5-flash-lite",
-    id: "gemini-2.5-flash-lite",
-    provider: "gemini",
-    label: "Gemini 2.5 Flash Lite",
-    description: "The most economical Gemini",
+    // Agentic system with built-in web search — the only model here that can
+    // answer questions about current events. Does NOT accept reasoning_format
+    // (Groq 400s), so no `reasoning` flag; its thinking arrives in a separate
+    // `reasoning` field that we never read. Shared account cap: 250 RPM.
+    key: "groq/compound-mini",
+    id: "groq/compound-mini",
+    provider: "groq",
+    label: "Compound Mini",
+    description: "Groq's agentic model with built-in web search",
   },
 ];
 

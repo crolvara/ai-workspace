@@ -1,5 +1,4 @@
 import OpenAI from "openai";
-import { GoogleGenAI } from "@google/genai";
 import type { ModelDef, ProviderId } from "./models";
 
 export interface ChatMessageInput {
@@ -13,10 +12,9 @@ export interface UsageOut {
   outputTokens: number;
 }
 
+// OpenRouter and Gemini were removed 15.08.2026 (chat is Groq-only now).
 const PROVIDER_KEY_ENV: Record<ProviderId, string> = {
   groq: "GROQ_API_KEY",
-  openrouter: "OPENROUTER_API_KEY",
-  gemini: "GEMINI_API_KEY",
   // Cloudflare also needs CLOUDFLARE_ACCOUNT_ID — see missingKeyMessage.
   cloudflare: "CLOUDFLARE_API_TOKEN",
 };
@@ -42,26 +40,20 @@ function requireKey(name: string): string {
   return value;
 }
 
-function openAiCompatibleClient(model: ModelDef): OpenAI {
-  if (model.provider === "groq") {
-    return new OpenAI({
-      apiKey: requireKey("GROQ_API_KEY"),
-      baseURL: "https://api.groq.com/openai/v1",
-    });
-  }
+function groqClient(): OpenAI {
   return new OpenAI({
-    apiKey: requireKey("OPENROUTER_API_KEY"),
-    baseURL: "https://openrouter.ai/api/v1",
+    apiKey: requireKey("GROQ_API_KEY"),
+    baseURL: "https://api.groq.com/openai/v1",
   });
 }
 
-async function* streamOpenAiCompatible(
+async function* streamGroq(
   model: ModelDef,
   messages: ChatMessageInput[],
   usageOut: UsageOut,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  const client = openAiCompatibleClient(model);
+  const client = groqClient();
   const stream = await client.chat.completions.create(
     {
       model: model.id,
@@ -71,12 +63,10 @@ async function* streamOpenAiCompatible(
       // Groq reasoning models (gpt-oss, qwen) otherwise put their internal
       // <think>…</think> deliberation in the streamed content and it reaches
       // the UI verbatim. "hidden" keeps only the final answer. Sent ONLY for
-      // flagged Groq models — Groq 400s on the param for non-reasoning models,
-      // and OpenRouter does not accept it at all. The param is Groq-specific,
-      // hence the cast past the openai SDK types.
-      ...(model.provider === "groq" && model.reasoning
-        ? ({ reasoning_format: "hidden" } as object)
-        : {}),
+      // flagged models — Groq 400s on the param for non-reasoning models
+      // (incl. compound-mini). The param is Groq-specific, hence the cast
+      // past the openai SDK types.
+      ...(model.reasoning ? ({ reasoning_format: "hidden" } as object) : {}),
     },
     { signal },
   );
@@ -93,34 +83,6 @@ async function* streamOpenAiCompatible(
   }
 }
 
-async function* streamGemini(
-  model: ModelDef,
-  messages: ChatMessageInput[],
-  usageOut: UsageOut,
-  signal?: AbortSignal,
-): AsyncGenerator<string> {
-  const ai = new GoogleGenAI({ apiKey: requireKey("GEMINI_API_KEY") });
-  const stream = await ai.models.generateContentStream({
-    model: model.id,
-    contents: messages.map((m) => ({
-      role: m.role === "assistant" ? "model" : "user",
-      parts: [{ text: m.content }],
-    })),
-    config: { abortSignal: signal },
-  });
-
-  for await (const chunk of stream) {
-    const text = chunk.text;
-    if (text) {
-      yield text;
-    }
-    if (chunk.usageMetadata) {
-      usageOut.inputTokens = chunk.usageMetadata.promptTokenCount ?? 0;
-      usageOut.outputTokens = chunk.usageMetadata.candidatesTokenCount ?? 0;
-    }
-  }
-}
-
 /**
  * Normalise fetched history into a valid alternating [user, assistant, …]
  * sequence so the new user turn can be appended cleanly.
@@ -128,10 +90,12 @@ async function* streamGemini(
  * Two things break otherwise: a failed/empty assistant turn persists only the
  * user row (dangling user message), and the 30-message window can begin on an
  * assistant message. Both yield assistant-leading or non-alternating contents
- * that strict providers (Gemini) reject, wedging the conversation. We drop
- * leading assistant messages, collapse same-role runs to the latest message,
- * and drop a trailing user message so the result always ends on an assistant
- * turn — ready for a fresh user message to follow.
+ * that strict providers reject, wedging the conversation. (Gemini — removed
+ * 15.08.2026 — was the original offender; the invariant is kept because it is
+ * cheap and any future strict provider benefits.) We drop leading assistant
+ * messages, collapse same-role runs to the latest message, and drop a trailing
+ * user message so the result always ends on an assistant turn — ready for a
+ * fresh user message to follow.
  */
 export function sanitizeHistory(
   messages: ChatMessageInput[],
@@ -159,10 +123,7 @@ export function streamChat(
   usageOut: UsageOut,
   signal?: AbortSignal,
 ): AsyncGenerator<string> {
-  if (model.provider === "gemini") {
-    return streamGemini(model, messages, usageOut, signal);
-  }
-  return streamOpenAiCompatible(model, messages, usageOut, signal);
+  return streamGroq(model, messages, usageOut, signal);
 }
 
 export interface GeneratedImage {
@@ -182,9 +143,6 @@ export function generateImage(
 ): Promise<GeneratedImage> {
   if (model.provider === "cloudflare") {
     return generateImageCloudflare(model, prompt);
-  }
-  if (model.provider === "gemini") {
-    return generateImageGemini(model, prompt);
   }
   throw new Error(`Provider ${model.provider} does not support image generation`);
 }
@@ -247,37 +205,3 @@ async function generateImageCloudflare(
   };
 }
 
-async function generateImageGemini(
-  model: ModelDef,
-  prompt: string,
-): Promise<GeneratedImage> {
-  const ai = new GoogleGenAI({ apiKey: requireKey("GEMINI_API_KEY") });
-  const response = await ai.models.generateContent({
-    model: model.id,
-    contents: prompt,
-    config: { responseModalities: ["TEXT", "IMAGE"] },
-  });
-
-  let imageBase64: string | null = null;
-  let mimeType = "image/png";
-  let text = "";
-  for (const part of response.candidates?.[0]?.content?.parts ?? []) {
-    if (part.inlineData?.data) {
-      imageBase64 = part.inlineData.data;
-      mimeType = part.inlineData.mimeType ?? "image/png";
-    } else if (part.text) {
-      text += part.text;
-    }
-  }
-  if (!imageBase64) {
-    throw new Error("The model did not return an image. Please try a different prompt.");
-  }
-  return {
-    dataUrl: `data:${mimeType};base64,${imageBase64}`,
-    text: text.trim(),
-    usage: {
-      inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
-      outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-    },
-  };
-}
