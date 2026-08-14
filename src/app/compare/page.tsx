@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { MODELS, PROVIDER_LABELS } from "@/lib/models";
+import { MODELS } from "@/lib/models";
 import { readChatStream } from "@/lib/sse-client";
 import { cn } from "@/lib/utils";
 
@@ -151,9 +151,6 @@ export default function ComparePage() {
               )}
             >
               {m.label}
-              <span className="ml-1 opacity-60">
-                {PROVIDER_LABELS[m.provider]}
-              </span>
             </button>
           ))}
         </div>

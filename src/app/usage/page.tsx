@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { MODELS, PROVIDER_LABELS, type ProviderId } from "@/lib/models";
+import { MODELS } from "@/lib/models";
 
 // Cached for a minute — three DB aggregates per request is otherwise an easy
 // load vector for a public page.
@@ -78,7 +78,6 @@ export default async function UsagePage() {
             <thead>
               <tr className="border-b bg-muted/50 text-left">
                 <th className="px-4 py-2.5 font-medium">Model</th>
-                <th className="px-4 py-2.5 font-medium">Provider</th>
                 <th className="px-4 py-2.5 text-right font-medium">Requests</th>
                 <th className="px-4 py-2.5 text-right font-medium">
                   Tokens (input/output)
@@ -90,11 +89,15 @@ export default async function UsagePage() {
             </thead>
             <tbody>
               {perModel.map((row) => (
-                <tr key={row.model} className="border-b last:border-0">
+                // The groupBy is (provider, model) — historic rows from removed
+                // providers can carry a model id that collides with a current
+                // one, so the key stays composite even though the provider
+                // column is no longer shown.
+                <tr
+                  key={`${row.provider}/${row.model}`}
+                  className="border-b last:border-0"
+                >
                   <td className="px-4 py-2.5">{modelLabel(row.model)}</td>
-                  <td className="px-4 py-2.5 text-muted-foreground">
-                    {PROVIDER_LABELS[row.provider as ProviderId] ?? row.provider}
-                  </td>
                   <td className="px-4 py-2.5 text-right tabular-nums">
                     {row._count}
                   </td>
@@ -110,7 +113,7 @@ export default async function UsagePage() {
               {perModel.length === 0 && (
                 <tr>
                   <td
-                    colSpan={5}
+                    colSpan={4}
                     className="px-4 py-8 text-center text-muted-foreground"
                   >
                     No data yet — send your first message.

@@ -8,14 +8,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import {
   Select,
   SelectContent,
-  SelectGroup,
   SelectItem,
-  SelectLabel,
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { DEFAULT_MODEL_KEY, MODELS, PROVIDER_LABELS, type ProviderId } from "@/lib/models";
+import { DEFAULT_MODEL_KEY, MODELS } from "@/lib/models";
 import { CHAT_DRAFT_KEY } from "@/lib/prompts";
 import { readChatStream } from "@/lib/sse-client";
 import { cn } from "@/lib/utils";
@@ -36,9 +34,6 @@ interface ChatMessage {
   outputTokens?: number | null;
   latencyMs?: number | null;
 }
-
-// OpenRouter and Gemini were removed 15.08.2026 — chat is Groq-only now.
-const PROVIDERS_IN_ORDER: ProviderId[] = ["groq"];
 
 const STARTER_PROMPTS = [
   "Explain how HTTPS works in simple terms",
@@ -393,17 +388,12 @@ export function ChatApp() {
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent side="top" align="start" alignItemWithTrigger={false}>
-                  {PROVIDERS_IN_ORDER.map((provider) => (
-                    <SelectGroup key={provider}>
-                      <SelectLabel>{PROVIDER_LABELS[provider]}</SelectLabel>
-                      {MODELS.filter((m) => m.provider === provider).map(
-                        (m) => (
-                          <SelectItem key={m.key} value={m.key}>
-                            {m.label}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectGroup>
+                  {/* Flat list — provider names are deliberately not shown in
+                      the UI, only model names. */}
+                  {MODELS.map((m) => (
+                    <SelectItem key={m.key} value={m.key}>
+                      {m.label}
+                    </SelectItem>
                   ))}
                 </SelectContent>
               </Select>

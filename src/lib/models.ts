@@ -20,10 +20,8 @@ export interface ModelDef {
   reasoning?: boolean;
 }
 
-export const PROVIDER_LABELS: Record<ProviderId, string> = {
-  groq: "Groq",
-  cloudflare: "Cloudflare Workers AI",
-};
+// (PROVIDER_LABELS was removed 15.08.2026 together with the last UI spot that
+// showed a provider name — the UI deliberately shows model names only.)
 
 /**
  * Free models only, Groq-only since 15.08.2026. Groq rotates its free catalog —
@@ -39,7 +37,7 @@ export const MODELS: ModelDef[] = [
     id: "openai/gpt-oss-120b",
     provider: "groq",
     label: "GPT OSS 120B",
-    description: "Groq's best all-round model — OpenAI open weights",
+    description: "Best all-round model — OpenAI open weights",
     reasoning: true,
   },
   {
@@ -74,7 +72,7 @@ export const MODELS: ModelDef[] = [
     id: "groq/compound-mini",
     provider: "groq",
     label: "Compound Mini",
-    description: "Groq's agentic model with built-in web search",
+    description: "Agentic model with built-in web search",
   },
 ];
 
