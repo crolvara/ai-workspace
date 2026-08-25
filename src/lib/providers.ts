@@ -64,7 +64,7 @@ async function* streamGroq(
       // <think>…</think> deliberation in the streamed content and it reaches
       // the UI verbatim. "hidden" keeps only the final answer. Sent ONLY for
       // flagged models — Groq 400s on the param for non-reasoning models
-      // (incl. compound-mini). The param is Groq-specific, hence the cast
+      // (incl. groq/compound). The param is Groq-specific, hence the cast
       // past the openai SDK types.
       ...(model.reasoning ? ({ reasoning_format: "hidden" } as object) : {}),
     },

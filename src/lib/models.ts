@@ -29,7 +29,9 @@ export interface ModelDef {
  * `curl -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models`).
  * Decommissions so far: llama-4-scout (18.07.2026, no notice),
  * llama-3.3-70b-versatile (16.08.2026, email notice), qwen/qwen3-32b
- * (silently, ~July 2026) — all three were in this list at the time.
+ * (silently, ~July 2026), llama-3.1-8b-instant (silently, by 25.08.2026) and
+ * groq/compound-mini (deprecated 25.08.2026 by email, decommission 21.09.2026;
+ * replaced here by the full groq/compound) — all were in this list at the time.
  */
 export const MODELS: ModelDef[] = [
   {
@@ -49,13 +51,6 @@ export const MODELS: ModelDef[] = [
     reasoning: true,
   },
   {
-    key: "groq/llama-3.1-8b",
-    id: "llama-3.1-8b-instant",
-    provider: "groq",
-    label: "Llama 3.1 8B",
-    description: "Very fast, for simple tasks",
-  },
-  {
     key: "groq/qwen3.6-27b",
     id: "qwen/qwen3.6-27b",
     provider: "groq",
@@ -67,11 +62,12 @@ export const MODELS: ModelDef[] = [
     // Agentic system with built-in web search — the only model here that can
     // answer questions about current events. Does NOT accept reasoning_format
     // (Groq 400s), so no `reasoning` flag; its thinking arrives in a separate
-    // `reasoning` field that we never read. Shared account cap: 250 RPM.
-    key: "groq/compound-mini",
-    id: "groq/compound-mini",
+    // `reasoning` field that we never read. Shared account cap: 250 RPM /
+    // 70k TPM. Replaced compound-mini, decommissioned 21.09.2026.
+    key: "groq/compound",
+    id: "groq/compound",
     provider: "groq",
-    label: "Compound Mini",
+    label: "Compound",
     description: "Agentic model with built-in web search",
   },
 ];
