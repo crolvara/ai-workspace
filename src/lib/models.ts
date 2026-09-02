@@ -29,9 +29,16 @@ export interface ModelDef {
  * `curl -H "Authorization: Bearer $GROQ_API_KEY" https://api.groq.com/openai/v1/models`).
  * Decommissions so far: llama-4-scout (18.07.2026, no notice),
  * llama-3.3-70b-versatile (16.08.2026, email notice), qwen/qwen3-32b
- * (silently, ~July 2026), llama-3.1-8b-instant (silently, by 25.08.2026) and
+ * (silently, ~July 2026), llama-3.1-8b-instant (silently, by 25.08.2026),
  * groq/compound-mini (deprecated 25.08.2026 by email, decommission 21.09.2026;
- * replaced here by the full groq/compound) — all were in this list at the time.
+ * replaced here by the full groq/compound) and qwen/qwen3.6-27b (email
+ * 01.09.2026, decommission 14.09.2026 — swapped for qwen/qwen3.8-27b on
+ * 02.09.2026; unlike the earlier ones Groq promised to auto-route this one, but
+ * a verified model beats a silent transfer) — all were in this list at the time.
+ * Before swapping a model verify the flags it is listed with: qwen3.8 was checked
+ * live for `reasoning_format: "hidden"` (accepted, no <think> in the stream).
+ * A changed `key` is safe: conversations store it, but the loader falls back to
+ * DEFAULT_MODEL_KEY for keys no longer in MODELS.
  */
 export const MODELS: ModelDef[] = [
   {
@@ -51,10 +58,10 @@ export const MODELS: ModelDef[] = [
     reasoning: true,
   },
   {
-    key: "groq/qwen3.6-27b",
-    id: "qwen/qwen3.6-27b",
+    key: "groq/qwen3.8-27b",
+    id: "qwen/qwen3.8-27b",
     provider: "groq",
-    label: "Qwen 3.6 27B",
+    label: "Qwen 3.8 27B",
     description: "Strong at reasoning and code",
     reasoning: true,
   },
