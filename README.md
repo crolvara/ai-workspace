@@ -23,7 +23,7 @@
 
 | Page | Description |
 |---|---|
-| **Chat** | Streaming chat (SSE) with free models on Groq — incl. an agentic model with built-in web search — with per-browser conversation history, no account needed |
+| **Chat** | Streaming chat (SSE) with free models on Groq, incl. one with built-in web search (answers list the pages it opened), per-browser conversation history, no account needed |
 | **Compare** | Ask once, get side-by-side answers from up to 3 models with latency and token stats |
 | **Prompts** | Prompt library — built-in templates with `{{variables}}` plus your own, saved per session |
 | **OCR** | Image → text with Tesseract.js, English + Bulgarian, **fully in the browser** — the image never leaves your machine |

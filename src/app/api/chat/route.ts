@@ -12,6 +12,10 @@ import {
 import { checkRateLimit, clientIpFrom } from "@/lib/ratelimit";
 import { getOrCreateSession } from "@/lib/session";
 
+// Web-search answers (browser_search) take ~10-20 s end to end — above the
+// 10 s Vercel default without fluid compute. 60 s is the Hobby ceiling.
+export const maxDuration = 60;
+
 const HISTORY_LIMIT = 30;
 const MAX_MESSAGE_LENGTH = 8000;
 

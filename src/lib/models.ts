@@ -18,6 +18,13 @@ export interface ModelDef {
    * Groq rejects the param with a 400 there.
    */
   reasoning?: boolean;
+  /**
+   * Send Groq's built-in `browser_search` tool (gpt-oss only). The model then
+   * searches/opens pages server-side on Groq and cites them with 【N†…】
+   * markers; providers.ts drops those and appends the opened pages as a
+   * "Sources:" list (see citations.ts for why markers are not mapped).
+   */
+  webSearch?: boolean;
 }
 
 // (PROVIDER_LABELS was removed 15.08.2026 together with the last UI spot that
@@ -30,8 +37,8 @@ export interface ModelDef {
  * Decommissions so far: llama-4-scout (18.07.2026, no notice),
  * llama-3.3-70b-versatile (16.08.2026, email notice), qwen/qwen3-32b
  * (silently, ~July 2026), llama-3.1-8b-instant (silently, by 25.08.2026),
- * groq/compound-mini (deprecated 25.08.2026 by email, decommission 21.09.2026;
- * replaced here by the full groq/compound) and qwen/qwen3.6-27b (email
+ * groq/compound-mini AND the full groq/compound (both decommissioned 21.09.2026;
+ * web search now comes from gpt-oss + the browser_search tool) and qwen/qwen3.6-27b (email
  * 01.09.2026, decommission 14.09.2026 — swapped for qwen/qwen3.8-27b on
  * 02.09.2026; unlike the earlier ones Groq promised to auto-route this one, but
  * a verified model beats a silent transfer) — all were in this list at the time.
@@ -66,16 +73,20 @@ export const MODELS: ModelDef[] = [
     reasoning: true,
   },
   {
-    // Agentic system with built-in web search — the only model here that can
-    // answer questions about current events. Does NOT accept reasoning_format
-    // (Groq 400s), so no `reasoning` flag; its thinking arrives in a separate
-    // `reasoning` field that we never read. Shared account cap: 250 RPM /
-    // 70k TPM. Replaced compound-mini, decommissioned 21.09.2026.
-    key: "groq/compound",
-    id: "groq/compound",
+    // Replaces groq/compound (decommissioned 21.09.2026 with compound-mini):
+    // gpt-oss + Groq's built-in browser_search tool. Deliberately on the 20B —
+    // Groq rate limits are PER MODEL, and one search question costs ~45-150k
+    // prompt tokens (the model opens pages in a loop). On the 120B that would
+    // starve Одитпро's chat assistant, which shares the account and model;
+    // nothing else uses the 20B bucket. Verified live 24.09.2026 (streaming +
+    // reasoning_format "hidden" + tools together → 200).
+    key: "groq/gpt-oss-20b-web",
+    id: "openai/gpt-oss-20b",
     provider: "groq",
-    label: "Compound",
-    description: "Agentic model with built-in web search",
+    label: "GPT OSS 20B + Web",
+    description: "Searches the web — for current events and fresh facts",
+    reasoning: true,
+    webSearch: true,
   },
 ];
 

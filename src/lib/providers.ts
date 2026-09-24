@@ -1,5 +1,10 @@
 import OpenAI from "openai";
 import type { ModelDef, ProviderId } from "./models";
+import {
+  CitationRewriter,
+  recordToolPages,
+  type ExecutedToolDelta,
+} from "./citations";
 
 export interface ChatMessageInput {
   role: "user" | "assistant";
@@ -63,24 +68,39 @@ async function* streamGroq(
       // Groq reasoning models (gpt-oss, qwen) otherwise put their internal
       // <think>…</think> deliberation in the streamed content and it reaches
       // the UI verbatim. "hidden" keeps only the final answer. Sent ONLY for
-      // flagged models — Groq 400s on the param for non-reasoning models
-      // (incl. groq/compound). The param is Groq-specific, hence the cast
-      // past the openai SDK types.
+      // flagged models — Groq 400s on the param for non-reasoning models.
+      // Both params are Groq-specific, hence the casts past the SDK types.
       ...(model.reasoning ? ({ reasoning_format: "hidden" } as object) : {}),
+      // Built-in web search, executed on Groq's side — no tool loop here.
+      ...(model.webSearch
+        ? ({ tools: [{ type: "browser_search" }] } as object)
+        : {}),
     },
     { signal },
   );
 
+  // Only web-search models emit 【N†…】 citations; others pass through as is.
+  const sources: string[] = [];
+  const citations = model.webSearch ? new CitationRewriter(sources) : null;
+
   for await (const chunk of stream) {
-    const delta = chunk.choices[0]?.delta?.content;
+    const choiceDelta = chunk.choices[0]?.delta as
+      | { content?: string | null; executed_tools?: ExecutedToolDelta[] }
+      | undefined;
+    if (citations) recordToolPages(sources, choiceDelta?.executed_tools);
+    const delta = choiceDelta?.content;
     if (delta) {
-      yield delta;
+      const text = citations ? citations.push(delta) : delta;
+      if (text) yield text;
     }
     if (chunk.usage) {
       usageOut.inputTokens = chunk.usage.prompt_tokens ?? 0;
       usageOut.outputTokens = chunk.usage.completion_tokens ?? 0;
     }
   }
+
+  const tail = citations?.finish();
+  if (tail) yield tail;
 }
 
 /**

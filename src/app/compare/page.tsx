@@ -24,7 +24,7 @@ interface CompareResult {
 export default function ComparePage() {
   const [selected, setSelected] = useState<string[]>([
     "groq/gpt-oss-120b",
-    "groq/compound",
+    "groq/gpt-oss-20b-web",
   ]);
   const [prompt, setPrompt] = useState("");
   const [results, setResults] = useState<Record<string, CompareResult>>({});
